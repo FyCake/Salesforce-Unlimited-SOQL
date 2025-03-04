@@ -14,11 +14,12 @@ class QueryThread(QThread):
     log_signal = pyqtSignal(str)  # 日志信号
 
 
-    def __init__(self, alias, file_path, soql_query_input, credentials=None):
+    def __init__(self, alias, file_path, soql_query_input, batch_size_input):
         super().__init__()
         self.alias = alias
         self.file_path = file_path
         self.soql_query_input = soql_query_input
+        self.batch_size_input = batch_size_input
         self.is_running = True
 
     def run(self):
@@ -31,19 +32,19 @@ class QueryThread(QThread):
             self.is_running = False
             return
         if self.is_running:
-            self.pre_query(self.alias, self.soql_query_input, self.file_path, 'Sheet1', self.credentials)
+            self.pre_query(self.soql_query_input, self.file_path, 'Sheet1', self.credentials)
             if self.is_running:
-                self.query_account(self.credentials)
+                self.query_account(self.credentials, self.batch_size_input)
                 self.log_signal.emit("⭐⭐⭐查询完成，数据已导出！⭐⭐⭐\n*********\n")             
 
     def get_sf_credentials(self, alias):
         # 获取凭证，返回 session_id, instance_url，如果无法获取凭证，则跳转到登录页面
         try:
-            self.log_signal.emit(f"> 获取 {alias} 组织凭证...")
+            self.log_signal.emit(f"> 获取 {alias} Org凭证...")
             sf_info = os.popen(f"sfdx force:org:display -u {alias} --json").read()#这句话是获取org信息，包括accessToken和instanceUrl
             sf_info_json = json.loads(sf_info)
             if 'result' not in sf_info_json or 'accessToken' not in sf_info_json['result'] or 'instanceUrl' not in sf_info_json['result']:
-                self.log_signal.emit(f"> 请在浏览器中登录并授权访问 {alias} 组织...")
+                self.log_signal.emit(f"> 请在浏览器中登录并授权访问 {alias} Org...")
                 os.system(f"sfdx force:auth:web:login -a {alias}")
                 sf_info = os.popen(f"sfdx force:org:display -u {alias} --json").read()
                 sf_info_json = json.loads(sf_info)
@@ -65,7 +66,7 @@ class QueryThread(QThread):
         # user_input = re.sub(r"[^\w\s,']", "", user_input)
         return user_input
     
-    def pre_query(self, alias, soql_query_input, file_path, sheet_name, credentials=None):
+    def pre_query(self, soql_query_input, file_path, sheet_name, credentials=None):
         # 先为file中ids去重
         df = pd.read_excel(file_path, sheet_name=sheet_name, header=None)
         ids_header = df.iloc[0, 0]
@@ -92,17 +93,17 @@ class QueryThread(QThread):
         try:
             results = sf.query(soql_query_input_test)
             if 'errorCode' in results:
-                self.log_signal.emit(f"❗❗❗ SOQL查询语句不合法！\n· 请检查你的SOQL语句: {soql_query_input}\n*********\n")
+                self.log_signal.emit(f"❗❗❗ SOQL查询语句不合法！\n· 请检查你的SOQL语句: {soql_query_input}\n错误原因：{results["errorCode"]}\n*********\n")
                 self.error_signal.emit(f"SOQL 查询语句不合法！请检查你的SOQL语句是否正确!\n")
                 self.is_running = False
                 return
         except Exception as e:
-            self.log_signal.emit(f"❗❗❗ SOQL查询语句不合法！\n· 请检查你的SOQL语句: {soql_query_input}\n*********\n")
+            self.log_signal.emit(f"❗❗❗ SOQL查询语句不合法！\n· 请检查你的SOQL语句: {soql_query_input}\n错误原因：{e}\n*********\n")
             self.error_signal.emit(f"SOQL 查询语句不合法！请检查你的SOQL语句是否正确!\n")
             self.is_running = False
             return
 
-    def query_account(self, credentials):
+    def query_account(self, credentials, batch_size_input):
         session_id, instance_url = credentials
         sf = Salesforce(instance_url=instance_url, session_id=session_id)
         if not sf:
@@ -112,19 +113,19 @@ class QueryThread(QThread):
         soql_query_input_safe = self.sanitize_soql_input(self.soql_query_input)
         df = pd.read_excel(self.file_path, sheet_name='Sheet1去重后list')
         ids = df.iloc[:, 0].tolist()
-
-        batch_size = 200
+        
+        batch_size_input = int(batch_size_input)
         all_results = []
         self.log_signal.emit(f"> 开始 SOQL 查询数据...")
-        for i in range(0, len(ids), batch_size):#这句话是把ids分成batch_size个子列表
-            self.progress_signal.emit(int((i + batch_size) / len(ids) * 100))
-            if len(ids) - i < batch_size:
+        for i in range(0, len(ids), batch_size_input):#这句话是把ids分成batch_size_input个子列表
+            self.progress_signal.emit(int((i + batch_size_input - 2) / len(ids) * 100))
+            if len(ids) - i < batch_size_input:
                 self.log_signal.emit(f"· 正在查询第{i+1}到{len(ids)}条数据...")
-            elif i > len(ids) - batch_size:
+            elif i > len(ids) - batch_size_input:
                 self.log_signal.emit(f"· 正在查询第{i+1}到{len(ids)}条数据...")
             else:
-                self.log_signal.emit(f"· 正在查询第{i+1}到{i+batch_size}条数据...")
-            batch_ids = ids[i:i + batch_size]
+                self.log_signal.emit(f"· 正在查询第{i+1}到{i+batch_size_input}条数据...")
+            batch_ids = ids[i:i + batch_size_input]
             soql_query = soql_query_input_safe + " IN ({})".format(','.join(map(lambda x: "'{}'".format(x), batch_ids)))
             try:
                 results = sf.query(soql_query)
