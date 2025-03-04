@@ -93,7 +93,7 @@ class QueryThread(QThread):
         try:
             results = sf.query(soql_query_input_test)
             if 'errorCode' in results:
-                self.log_signal.emit(f"❗❗❗ SOQL查询语句不合法！\n· 请检查你的SOQL语句: {soql_query_input}\n错误原因：{results["errorCode"]}\n*********\n")
+                self.log_signal.emit(f"❗❗❗ SOQL查询语句不合法！\n· 请检查你的SOQL语句: {soql_query_input}\n错误原因：{results['errorCode']}\n*********\n")
                 self.error_signal.emit(f"SOQL 查询语句不合法！请检查你的SOQL语句是否正确!\n")
                 self.is_running = False
                 return
