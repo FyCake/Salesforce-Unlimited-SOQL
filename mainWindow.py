@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QProgressBar, QTextEdit, QMessageBox
 from PyQt5.QtCore import  pyqtSignal, QProcess
+from PyQt5.QtGui import QIntValidator
 from openpyxl import load_workbook
 import os
 from query import QueryThread
@@ -8,13 +9,13 @@ class SalesforceQueryApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Salesforce Unlimited SOQL")
-        self.setGeometry(100, 100, 1000, 2000)
+        self.setGeometry(100, 100, 500, 800)
         self.is_query_running = False  # 新增标志变量，用于跟踪查询状态
         self.error_signal = pyqtSignal(str)  # 确保 error_signal 被正确初始化
         
         self.process = QProcess()
         self.initUI()
-        self.log_text.append(f"❤❤❤\n> 使用须知：\n· 1.使用前请安装Salesforce CLI，如果不会配置Path，请安装在默认路径即可。Salesforce CLI下载地址：https://developer.salesforce.com/tools/salesforcecli\n· 2.Org Alias Name 为您连接Salesforce Org时自定义的名称，用于区分不同的Org；如第一次该工具，点击查询按钮后，程序会跳转到Salesforce登录页面，进行登录并连接Org，非第一次使用，既已经登录验证过了，可直接输入Org Alias Name拉取数据。\n· 3.程序会读取Excel文件中名为'Sheet1'子表包含标题的第一列数据，作为SOQL查询条件，查询前程序会自动去重，去重后的数据会保存到名为'Sheet1去重后list'的子表中。请确保Excel文件中'Sheet1'子表的第一列数据为包含标题的查询条件。\n· 4.SOQL语句须为合法的SOQL语句，如需查询所有数据，请使用'SELECT FIELD1, FIELD2, FIELD3 FROM object_name WHERE FIELD'语句形式，程序中会自动添加IN和'()'，你不用自己添加，只需要确保Sheet1作为查询条件的数据字段名在SOQL语句的最后即可。\n· 5.查询结果会保存到名为'SOQL Result'的子表中。\n❤❤❤\n")
+        self.log_text.append(f"❤❤❤\n> 【使用须知】：\n· 1.使用前请安装Salesforce CLI，如果不会配置Path，请安装在默认路径即可。Salesforce CLI 下载地址：https://developer.salesforce.com/tools/salesforcecli\n· 2.Org Alias Name 为您连接Salesforce Org时自定义的名称，用于区分不同的Org；如第一次该工具，点击查询按钮后，程序会跳转到Salesforce登录页面，进行登录并连接Org，非第一次使用，既已经登录验证过了，可直接输入Org Alias Name拉取数据。\n· 3.程序会读取Excel文件中名为'Sheet1'子表包含标题的第一列数据，作为SOQL查询条件，查询前程序会自动去重，去重后的数据会保存到名为'Sheet1去重后list'的子表中。请确保Excel文件中'Sheet1'子表的第一列数据为包含标题的查询条件。\n· 4.SOQL语句须为合法的SOQL语句，请使用'SELECT FIELD1, FIELD2, FIELD3 FROM object_name WHERE FIELD'语句形式，程序中会自动添加IN和'()'，你不用自己添加，只需要确保Sheet1作为查询条件的数据字段名在SOQL语句的最后即可。\n· 5.Batch Size为每一批次查询的keys的数量，默认500可以更改，建议不要太大，以免Salesforce API限制。\n· 6.查询结果会保存到名为'SOQL Result'的子表中。\n——Thanks, by Yan.\n❤❤❤\n")
         
         self.credentials = None  # 新增成员变量来存储凭证
 
@@ -24,13 +25,13 @@ class SalesforceQueryApp(QWidget):
 
         # Org alias 输入,默认为fy163，用户可以更改
         self.alias_label = QLabel("Org Alias Name:")
-        self.alias_input = QLineEdit(text="fy163")
+        self.alias_input = QLineEdit(text="")
         main_layout.addWidget(self.alias_label)
         main_layout.addWidget(self.alias_input)
 
         # Excel 文件路径输入
         self.file_label = QLabel("Excel 文件路径:")
-        self.file_input = QLineEdit(text="C:/Users/FY/Desktop/AI项目/PythonCode/workpy/testData.xlsx")
+        self.file_input = QLineEdit(text="")
         self.file_btn = QPushButton("选择文件")
         self.file_btn.clicked.connect(self.select_file)
         file_layout = QHBoxLayout()
@@ -41,9 +42,17 @@ class SalesforceQueryApp(QWidget):
 
         # SOQL 查询语句输入
         self.soql_label = QLabel("SOQL 查询语句:")
-        self.soql_input = QLineEdit(text="select id,name from account where id")
+        self.soql_input = QLineEdit(text="")
         main_layout.addWidget(self.soql_label)
         main_layout.addWidget(self.soql_input)
+
+        # batch数
+        self.batch_label = QLabel("Batch Size:")
+        self.batch_input = QLineEdit(text="500")
+        self.batch_input.setValidator(QIntValidator())
+        main_layout.addWidget(self.batch_label)
+        main_layout.addWidget(self.batch_input)
+
 
         # 查询按钮，一旦被点击，按钮就不可用，直到查询结束
         self.query_btn = QPushButton("执行查询")
@@ -69,7 +78,8 @@ class SalesforceQueryApp(QWidget):
         self.setLayout(main_layout)
 
     def select_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "选择 Excel 文件", "", "Excel Files (*.xlsx)")
+        desktop_path = os.path.expanduser("~/Desktop")
+        file_path, _ = QFileDialog.getOpenFileName(self, "选择 Excel 文件", desktop_path, "Excel Files (*.xlsx)")
         if file_path:
             self.file_input.setText(file_path)
     def pre_check(self, alias, soql_query_input, file_path, sheet_name):
@@ -113,14 +123,15 @@ class SalesforceQueryApp(QWidget):
 
         alias = self.alias_input.text().strip()
         file_path = self.file_input.text().strip()
-        soql_query_input = self.soql_input.text().strip() 
+        soql_query_input = self.soql_input.text().strip()
+        batch_size_input = self.batch_input.text().strip()
 
         # 文件检查
         pre_check_result = self.pre_check(alias, soql_query_input, file_path, 'Sheet1')
         if not pre_check_result:
             return
 
-        self.query_thread = QueryThread(alias, file_path, soql_query_input)
+        self.query_thread = QueryThread(alias, file_path, soql_query_input, batch_size_input)
         
         # 连接信号
         self.query_thread.progress_signal.connect(self.update_progress)
