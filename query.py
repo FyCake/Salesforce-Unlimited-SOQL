@@ -40,11 +40,11 @@ class QueryThread(QThread):
     def get_sf_credentials(self, alias):
         # 获取凭证，返回 session_id, instance_url，如果无法获取凭证，则跳转到登录页面
         try:
-            self.log_signal.emit(f"> 获取 {alias} Org凭证...")
+            self.log_signal.emit(f"> 获取 {alias} 组织凭证...")
             sf_info = os.popen(f"sfdx force:org:display -u {alias} --json").read()#这句话是获取org信息，包括accessToken和instanceUrl
             sf_info_json = json.loads(sf_info)
             if 'result' not in sf_info_json or 'accessToken' not in sf_info_json['result'] or 'instanceUrl' not in sf_info_json['result']:
-                self.log_signal.emit(f"> 请在浏览器中登录并授权访问 {alias} Org...")
+                self.log_signal.emit(f"> 请在浏览器中登录并授权访问 {alias} 组织...")
                 os.system(f"sfdx force:auth:web:login -a {alias}")
                 sf_info = os.popen(f"sfdx force:org:display -u {alias} --json").read()
                 sf_info_json = json.loads(sf_info)
