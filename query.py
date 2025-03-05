@@ -203,10 +203,7 @@ class QueryThread(QThread):
                             else:
                                 new_dict[f"{new_key}[{idx}]"] = item
                     else:
-                        if k == 'UserRole':
-                            new_dict[f"{new_key}.Name"] = v 
-                        else:
-                            new_dict[new_key] = v
+                        new_dict[new_key] = v
             else:
                 new_dict[parent_key] = current
         return new_dict
