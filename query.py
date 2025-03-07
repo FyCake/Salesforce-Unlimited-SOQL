@@ -138,6 +138,12 @@ class QueryThread(QThread):
             all_results.extend(results['records'])
         self.log_signal.emit(f"> SOQL 查询执行完毕！")
 
+        # 如果all_results为空，则直接返回
+        if not all_results:
+            self.log_signal.emit(f"❗❗❗ 查询完毕，SOQL查询结果没有数据返回！\n*********\n")
+            self.is_running = False
+            return
+
         self.log_signal.emit(f"> 开始导出数据...")
         expanded_data = [self.expand_dict_iterative(item) for item in all_results]
 
